@@ -1,0 +1,60 @@
+la_bench: does a change make libarchive faster or slower?
+
+libarchive has tests for what it does, but nothing that measures how fast it
+does it.  These tools compare two builds, format by format, and say whether a
+difference is real.  They use only libarchive's public API, so they can compare
+any two versions, and they stay outside both trees being compared.
+
+	la_bench.c	one operation, once, in its own process
+	build.sh	builds la_bench against a libarchive source tree
+	compare.sh	runs two builds in turn
+	compare.awk	reports the differences from compare.sh's results
+	test.sh		tests the above
+
+Usage:
+
+	./build.sh ~/libarchive-a /tmp/bench-a
+	./build.sh ~/libarchive-b /tmp/bench-b
+	./compare.sh -o /tmp/results /tmp/bench-a /tmp/bench-b
+	./test.sh /tmp/bench-a
+
+Before trusting a comparison, compare two separate builds of the same source.
+That shows how much the machine moves on its own: a difference no bigger than
+that one isn't a difference.  Run them on an idle machine, plugged in; a machine
+doing other work mostly shows up as "unclear" results.
+
+Operations:
+
+	list	reads every header and skips the data
+	read	reads every header and all the data
+	write	creates the archive, sending the output nowhere
+
+Reads run from memory and writes go nowhere, so disks don't enter into it.  The
+clock covers everything from creating the archive object to freeing it.
+
+Reading the report:
+
+	worse	B is past the threshold (default 1%), with confidence
+	better	the same, in the other direction
+	same	B is within the threshold, with confidence
+	unclear	it could be either: more rounds might settle it
+
+"wall" and "cpu" are time, "rss" is the process's peak memory, and "size" is the
+archive written.  Peak memory includes the input held in memory and, for write,
+the data to be written, so compare the change between builds, not the amount.
+
+compare.awk exits 2 if the builds read different numbers of entries or bytes,
+because their timings aren't then measuring the same work.
+
+To add a format, add a row to formats[] in la_bench.c, and enable any library it
+needs in build.sh.
+
+Limits:
+
+ * POSIX only: Windows would need other clocks and another way to get peak
+   memory.
+ * Results compare two builds on one machine at one time.  They don't carry over
+   to another machine or compare formats with each other.
+ * A compiled change can shift code alignment and move timings a little without
+   the code being any better or worse.  Very small differences can be that, which
+   is why the threshold exists.
